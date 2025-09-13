@@ -52,14 +52,14 @@ system("git init")
 evalgprt <- function(y, wt, parms) {
 
   leval=FALSE
-  if(!has_warning(try(evir::gpd(y, threshold = 0, method = "ml"),silent = TRUE))){
-    if(!has_error(try(evir::gpd(y, threshold = 0, method = "ml"),silent = TRUE),silent = TRUE)){
+  if(!has_warning(try(evir::gpd(y, threshold = 8.3, method = "ml"),silent = TRUE))){
+    if(!has_error(try(evir::gpd(y, threshold = 8.3, method = "ml"),silent = TRUE),silent = TRUE)){
       leval=TRUE
     }
   }
   if(leval){
 
-    fit=try(evir::gpd(y, threshold = 0, method = "ml"),silent = TRUE)
+    fit=try(evir::gpd(y, threshold = 8.3, method = "ml"),silent = TRUE)
     #Shape parameter
     sh=fit$par.ests[1]
     #Scale parameter
@@ -103,11 +103,11 @@ splitgprt <- function(y, wt, x, parms, continuous)
   #Test of the fit of the fevd function, if it works well the local variable lparent takes the value TRUE, FALSE in the contrary case
 
   #Test if the fevd fit works well
-  if(!has_warning(try(evir::gpd(y, threshold = 0, method = "ml"),silent = TRUE))){
-    if(!has_error(try(evir::gpd(y, threshold = 0, method = "ml"),silent = TRUE))){
+  if(!has_warning(try(evir::gpd(y, threshold = 8.3, method = "ml"),silent = TRUE))){
+    if(!has_error(try(evir::gpd(y, threshold = 8.3, method = "ml"),silent = TRUE))){
       #If yes lparent=TRUE
       lparent=TRUE
-      fitparent=evir::gpd(y, threshold = 0, method = "ml")
+      fitparent=evir::gpd(y, threshold = 8.3, method = "ml")
     }else{
       #Else lparent=FALSE
       lparent=FALSE
@@ -135,18 +135,18 @@ splitgprt <- function(y, wt, x, parms, continuous)
         i%%10==0 &
         length(1:i) > 5 &
         length((i+1):n) > 5 &
-        !has_warning(try(evir::gpd(y[1:i], threshold = 0, method = "ml"),silent = TRUE)) &
-        !has_warning(try(evir::gpd(y[(i+1):n], threshold = 0, method = "ml"),silent = TRUE))     ){
+        !has_warning(try(evir::gpd(y[1:i], threshold = 8.3, method = "ml"),silent = TRUE)) &
+        !has_warning(try(evir::gpd(y[(i+1):n], threshold = 8.3, method = "ml"),silent = TRUE))     ){
 
         if(
-          !has_error(try(evir::gpd(y[1:i], threshold = 0, method = "ml"),silent = TRUE)) &
-          !has_error(try(evir::gpd(y[(i+1):n], threshold = 0, method = "ml"),silent = TRUE))
+          !has_error(try(evir::gpd(y[1:i], threshold = 8.3, method = "ml"),silent = TRUE)) &
+          !has_error(try(evir::gpd(y[(i+1):n], threshold = 8.3, method = "ml"),silent = TRUE))
         ){
 
           #If yes, computation of the fevd fit on children nodes and attribution of the resulting goodness and direction
 
-          fitmoins=evir::gpd(y[1:i], threshold = 0, method = "ml")
-          fitplus=evir::gpd(y[(i+1):n], threshold = 0, method = "ml")
+          fitmoins=evir::gpd(y[1:i], threshold = 8.3, method = "ml")
+          fitplus=evir::gpd(y[(i+1):n], threshold = 8.3, method = "ml")
 
             if(lparent==TRUE & fitmoins$par.ests[1]>0 & fitplus$par.ests[1]>0){
               goodness[i]=max(0,positive_nll(fitparent$nllh.final)-(positive_nll(fitmoins$nllh.final) + positive_nll(fitplus$nllh.final)))
@@ -211,24 +211,24 @@ splitgprt <- function(y, wt, x, parms, continuous)
         #lparent &
         length(ymoins) > 5 &
         length(yplus) > 5 &
-        !has_warning(try(evir::gpd(ymoins, threshold = 0, method = "ml"),silent = TRUE)) &
-        !has_warning(try(evir::gpd(yplus, threshold = 0, method = "ml"),silent = TRUE))
+        !has_warning(try(evir::gpd(ymoins, threshold = 8.3, method = "ml"),silent = TRUE)) &
+        !has_warning(try(evir::gpd(yplus, threshold = 8.3, method = "ml"),silent = TRUE))
       ){
 
         if(
-          !has_error(try(evir::gpd(ymoins, threshold = 0, method = "ml"),silent = TRUE)) &
-          !has_error(try(evir::gpd(yplus, threshold = 0, method = "ml"),silent = TRUE))     ){
+          !has_error(try(evir::gpd(ymoins, threshold = 8.3, method = "ml"),silent = TRUE)) &
+          !has_error(try(evir::gpd(yplus, threshold = 8.3, method = "ml"),silent = TRUE))     ){
 
           #If yes, computation of the fevd fit on children nodes and attribution of the resulting goodness and direction
 
-          fitmoins=evir::gpd(ymoins, threshold = 0, method = "ml")
-          fitplus=evir::gpd(yplus, threshold = 0, method = "ml")
+          fitmoins=evir::gpd(ymoins, threshold = 8.3, method = "ml")
+          fitplus=evir::gpd(yplus, threshold = 8.3, method = "ml")
 
           #Reminder: the more the value of the goodness is closed to 0 the less purely the node is)
 
           #if(fitmoins$par.ests[1]>0 & fitplus$par.ests[1]>0){
             if(lparent==TRUE & fitmoins$par.ests[1]>0 & fitplus$par.ests[1]>0){
-              goodness[i]=max(0,positive_nll(evir::gpd(y, threshold = 0, method = "ml")$nllh.final)-(positive_nll(fitmoins$nllh.final) + positive_nll(fitplus$nllh.final)))
+              goodness[i]=max(0,positive_nll(evir::gpd(y, threshold = 8.3, method = "ml")$nllh.final)-(positive_nll(fitmoins$nllh.final) + positive_nll(fitplus$nllh.final)))
             }else{
               goodness[i]=0
               #goodness[i]=max(0,naive_ll_gpd_fit(y)-(fitmoins$nllh.final + fitplus$nllh.final))
@@ -490,3 +490,4 @@ compute_bic_gpd <- function(gpd_model, n_obs) {
   bic <- -2 * loglik + log(n_obs) * n_params
   return(list(logLik = loglik, BIC = bic))
 }
+

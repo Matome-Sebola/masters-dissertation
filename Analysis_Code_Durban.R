@@ -2,7 +2,6 @@
 # MAIN SCRIPT: Time Varying Threshold Generalised Pareto Regression Tree
 # =======================================================================
 
-
 # Load packages
 library(rpart)
 library(evir)
@@ -19,6 +18,7 @@ library(dplyr)
 library(corrplot)
 library(glmnet)
 library(testit)
+library(evmix)
 
 # Source GP regression tree method functions
 source("./static_gprt_func.R")
@@ -26,7 +26,7 @@ source("./GPRT_func.R")
 #--------------------------
 # STEP 1: Load the dataset
 # --------------------------
-rainfall <- read_excel("C:/Users/matom/Downloads/Masters Dissertation/Analysis/durban_station_rainfall.xlsx")
+rainfall <- read_excel("C:/Users/matom/OneDrive/Data Analysis/durban_station_rainfall.xlsx")
 options(scipen = 999)
 R <-ts(rainfall$PRECTOTCORR)
 
@@ -138,6 +138,13 @@ train_data$threshold_col <- threshold
 response_matrix <- cbind(train_data$PRECTOTCORR, train_data$threshold_col)
 
 
+# -------------------------------------------
+# STEP 6C: Plot Threshold for static GPRT
+# ----------------------------------------
+mrlplot(R)
+tcplot(R)
+
+
 # ----------------------------------------
 # STEP 7: Fit Time-Varying GPRT (Unpruned)
 # ----------------------------------------
@@ -160,7 +167,7 @@ print(gprt_model)
 # -------------------------------------------
 
 # Base tree plot
-par(bg = "white", mar = c(2, 2, 2, 2))
+par(bg = "white", mar = c(1, 1, 1, 1))
 plot(gprt_model, uniform = TRUE, margin = 0.1)
 
 # Extract node positions and frame info
@@ -183,7 +190,7 @@ for (i in seq_len(nrow(frame))) {
 }
 
 # Add default node labels (centered inside shapes)
-text(gprt_model, use.n = TRUE, all = TRUE, cex = 0.6, pos=1)
+text(gprt_model, use.n = TRUE, all = TRUE, cex = 0.8, pos=1)
 
 # Annotate GPD parameters and sample sizes
 for (i in seq_len(nrow(frame))) {
@@ -206,9 +213,6 @@ for (i in seq_len(nrow(frame))) {
     text(x, y - 0.10, paste0("n = ", n_obs), cex = 0.75, adj = 0.5)
   }
 }
-
-printcp(gprt_model)
-
 
 # ----------------------------------------------------
 # STEP 7B: Penalized Pruning of time-varying GPTR model
@@ -239,7 +243,7 @@ for (i in seq_len(nrow(frame))) {
   
   if (frame$var[i] != "<leaf>") {
     # Rectangle for split nodes
-    rect(x - 0.7, y - 0.03, x + 0.7, y + 0.03, col = "lightblue", border = "blue")
+    rect(x - 0.5, y - 0.03, x + 0.5, y + 0.03, col = "lightblue", border = "blue")
   } else {
     # Circle for terminal nodes
     symbols(x, y, circles = 0.3, inches = FALSE, add = TRUE, bg = "lightgreen")
@@ -247,7 +251,7 @@ for (i in seq_len(nrow(frame))) {
 }
 
 # Add default node labels (centered inside shapes)
-text(pruned_tree, use.n = TRUE, all = TRUE, cex = 0.75, pos=1)
+text(pruned_tree, use.n = TRUE, all = TRUE, cex = 0.8, pos=1)
 
 # Annotate GPD parameters and sample sizes
 for (i in seq_len(nrow(frame))) {
@@ -293,7 +297,6 @@ static_gprt <- rpart(
   )
 )
 
-
 cv_results <- cross_val_gprt(
   data = train_data,
   formula = PRECTOTCORR ~ T2M + T2M_MAX + T2M_MIN + PS + 
@@ -307,12 +310,12 @@ cv_results <- cross_val_gprt(
 optimal_cp <- cv_results[[1]]
 cat("Optimal Cost parameter CP:", optimal_cp, "\n")
 
-pruned_gprt <- prune(static_gprt, cp = optimal_cp)
+pruned_gprt <- prune(static_gprt, cp = 0.0057574 )
 
-
-# ----------------------
-# STEP 8B: Fit the GPD
-# ----------------------
+printcp(static_gprt)
+# -------------------------------
+# STEP 8B: Fit time varying GPD
+# -------------------------------
 
 # Observed rainfall values
 observed <- train_data$PRECTOTCORR
@@ -328,14 +331,13 @@ gpd_model <- gpd(exceedances, threshold = 0)
 
 # Step 3: Inspect results
 print(gpd_model)
-plot(gpd_model)
 
 
 # ------------------------------------------
 # STEP 9: Model Evaluation Accuracy Metrics
 # ------------------------------------------
 #Static threshold gprt
-gprt_result <- compute_bic_gprt(pruned_gprt, train_data)
+gprt_result <- compute_bic_gprt(static_gprt, train_data)
 print(gprt_result)
 
 #Time varying threshold gprt
@@ -345,3 +347,77 @@ print(time_gprt_result)
 #Time varying gpd
 gpd_result <- compute_bic_gpd(gpd_model, length(exceedances))
 print(gpd_result)
+
+
+
+# -----------------------------------------------------
+# STEP 9: Model Evaluation Accuracy Metrics on Test Set
+# -----------------------------------------------------
+## -------------------------------
+# BIC and Log-Likelihood on Test Set
+# -------------------------------
+
+# Helper: Compute log-likelihood and BIC for GPRT models
+compute_bic_gprt <- function(tree, data) {
+  loglik <- -sum(tree$frame[tree$frame$var == "<leaf>", "dev"], na.rm = TRUE)
+  n_params <- sum(tree$frame$var == "<leaf>") * 2  # shape and scale per leaf
+  n_obs <- nrow(data)
+  bic <- -2 * loglik + log(n_obs) * n_params
+  return(list(logLik = loglik, BIC = bic))
+}
+
+# Helper: Compute log-likelihood and BIC for GPD model
+compute_bic_gpd <- function(gpd_model, n_obs) {
+  loglik <- -gpd_model$nllh.final
+  n_params <- 2  # shape and scale
+  bic <- -2 * loglik + log(n_obs) * n_params
+  return(list(logLik = loglik, BIC = bic))
+}
+
+# -------------------------------
+# 1. Static GPRT Evaluation
+# -------------------------------
+static_gprt_test_result <- compute_bic_gprt(static_gprt, test_data)
+cat("Static GPRT - LogLik:", static_gprt_test_result$logLik, "\n")
+cat("Static GPRT - BIC:", static_gprt_test_result$BIC, "\n")
+
+# -------------------------------
+# 2. Pruned Time-Varying GPRT Evaluation
+# -------------------------------
+pruned_tree_test_result <- compute_bic_gprt(gprt_model, test_data)
+cat("Pruned Time-Varying GPRT - LogLik:", pruned_tree_test_result$logLik, "\n")
+cat("Pruned Time-Varying GPRT - BIC:", pruned_tree_test_result$BIC, "\n")
+
+# -------------------------------
+# 3. Time-Varying GPD Evaluation
+# -------------------------------
+# Use the GAM model fitted on training data to predict threshold for test data
+threshold_vec_test <- predict(fit, newdata = test_data, type = "response")
+
+# Ensure alignment
+stopifnot(length(threshold_vec_test) == nrow(test_data))
+
+observed_test <- test_data$PRECTOTCORR
+exceedances_test <- observed_test[observed_test > threshold_vec_test]
+
+loglik_test <- -sum(log(evir::dgpd(exceedances_test,
+                                   xi = gpd_model$par.ests[1],
+                                   beta = gpd_model$par.ests[2],
+                                   mu = 0)), na.rm = TRUE)
+
+bic_test <- -2 * loglik_test + log(length(exceedances_test)) * 2
+
+cat("Time-Varying GPD (Original Fit) - LogLik:", loglik_test, "\n")
+cat("Time-Varying GPD (Original Fit) - BIC:", bic_test, "\n")
+
+
+# Compute log-likelihood using original parameters
+loglik_test <- -sum(log(evir::dgpd(exceedances_test,
+                                   xi = gpd_model$par.ests[1],
+                                   beta = gpd_model$par.ests[2],
+                                   mu = 0)), na.rm = TRUE)
+
+bic_test <- -2 * loglik_test + log(length(exceedances_test)) * 2
+
+cat("Time-Varying GPD (Original Fit) - LogLik:", loglik_test, "\n")
+cat("Time-Varying GPD (Original Fit) - BIC:", bic_test, "\n")
