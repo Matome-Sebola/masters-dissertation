@@ -19,6 +19,8 @@ library(corrplot)
 library(glmnet)
 library(testit)
 library(evmix)
+library(quantreg)
+library(readxl)
 
 # Source GP regression tree method functions
 source("./static_gprt_func.R")
@@ -26,7 +28,9 @@ source("./GPRT_func.R")
 #--------------------------
 # STEP 1: Load the dataset
 # --------------------------
-rainfall <- read_excel("C:/Users/matom/OneDrive/Data Analysis/durban_station_rainfall.xlsx")
+library(readxl)
+#rainfall <- read_excel("C:/Users/matom/OneDrive/Data Analysis/durban_station_rainfall.xlsx")
+rainfall <- read_excel("C:/Users/matom/Documents/durban_station_rainfall.xlsx")
 options(scipen = 999)
 R <-ts(rainfall$PRECTOTCORR)
 
@@ -43,6 +47,24 @@ qqline (R)
 boxplot (rainfall$PRECTOTCORR, main ="(c) Box plot ",varwidth =TRUE ,xlab = " Rainfall (mm) ", col = "red" ,horizontal = TRUE )
 plot ( density (R),xlab =" Rainfall (mm) " ,main ="(d) Density plot ",col = "red")
 
+rainfall$Index <- seq_along(rainfall$YEAR)
+
+ggplot(rainfall, aes(x = Index, y = PRECTOTCORR)) +
+  geom_point(color = "black") +
+  scale_x_continuous(
+    breaks = seq(1, nrow(rainfall), by = 365*4),   # adjust step to match your data density
+    labels = rainfall$YEAR[seq(1, nrow(rainfall), by = 365*4)]
+  ) +
+  labs(x = "Year", y = "Daily rainfall (mm)") +
+  theme_gray(base_size = 14) +   # increase all base font sizes
+  theme(
+    axis.text.x  = element_text(size = 12, face = "bold"),
+    axis.text.y  = element_text(size = 12, face = "bold"),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    plot.title   = element_text(size = 16, face = "bold")
+  )
+
 #-------------------------------
 # STEP 3: Descriptive Statistics
 # ------------------------------
@@ -53,13 +75,9 @@ basicStats(R)
 #--------------------------
 # STEP 4: Data Preparations
 # -------------------------
-# Separate features (X) and target (y)
 rainfall <- rainfall[, !(names(rainfall) %in% c("YEAR","DOY"))]
-
-# Set split index (80% for training)
 split_index <- floor(nrow(rainfall) * 0.8)
 
-# Train and test datasets
 train_data <- rainfall[1:split_index, ]
 test_data  <- rainfall[(split_index + 1):nrow(rainfall), ]
 
@@ -87,63 +105,47 @@ best_lambda_1se <- cv_fit$lambda.1se
 final_model_1se <- glmnet(x, y, alpha = 1, lambda = best_lambda_1se)
 coef(final_model_1se)
 
-# -----------------------
-# STEP 6B: Fit Threshold
-# -----------------------
 
-fit <- gam(PRECTOTCORR ~ s(T2M_MAX) + s(WS2M) + s(WD2M) + s(RH2M) + s(WS2M_MAX) + s(WS2M_MIN), 
-           family = Gamma(link = "log"), data = train_data)
 
-threshold <- predict(fit, type = "response")  # Returns values on original scale
-# -----------------------
-# STEP 6C: Plot Threshold
-# -----------------------
+S <- rq(PRECTOTCORR ~ T2M_MAX + WS2M + WD2M + RH2M + WS2M_MAX + WS2M_MIN, 
+        tau = 0.90, data = train_data)
+
+pred <- predict(S, newdata = train_data)
+threshold <- pred  
+threshold <- pmax(0, pred )
+R <- train_data$PRECTOTCORR
+exceedances <- R[R > threshold]   # values above threshold
+n_exceed <- sum(R > threshold)    # count of exceedances
+cat("Number of exceedances:", n_exceed, "\n")
+
+parms = list(threshold = threshold)
+stopifnot(length(threshold) == nrow(train_data))
+train_data$threshold_col <- threshold
+response_matrix <- cbind(train_data$PRECTOTCORR, train_data$threshold_col)
+
 
 start_year <- 1981
 end_year <-2025
 years <- seq(start_year, end_year, by = 5)  
 
-break_positions <- (years - start_year) * 295 +1
+break_positions <- (years - start_year) * 290 +1
 
 # Plot the threshold with legend
 ggplot(train_data, aes(x = 1:nrow(train_data))) +
-  geom_point(aes(y = PRECTOTCORR, colour = "Observed Rainfall")) +
-  geom_line(aes(y = threshold, colour = "Time-Varying Threshold")) +
+  geom_point(aes(y = PRECTOTCORR, colour = "Observed rainfall")) +
+  geom_line(aes(y = threshold, colour = "Time-varying threshold")) +
   scale_color_manual(
-    values = c("Observed Rainfall" = "black", "Time-Varying Threshold" = "red"),
+    values = c("Observed rainfall" = "black", "Time-varying threshold" = "red"),
     name = ""  # legend title
   ) +
   scale_x_continuous(breaks = break_positions, labels = years) +
   labs(x = "Years", y = "Rainfall (mm)")
 
-
-# Observed response
-observed <- train_data$PRECTOTCORR
-
-# Count exceedances
-exceedances <- sum(observed > threshold)
-
-
-cat("Number of exceedances above threshold:", exceedances, "\n")
-
-parms = list(threshold = threshold)
-
-# Ensure the threshold vector has the same length as the training data
-stopifnot(length(threshold) == nrow(train_data))
-
-# Add the threshold as a column to the training data frame
-train_data$threshold_col <- threshold
-
-# Create the matrix response variable
-response_matrix <- cbind(train_data$PRECTOTCORR, train_data$threshold_col)
-
-
-# -------------------------------------------
+# ----------------------------------------
 # STEP 6C: Plot Threshold for static GPRT
 # ----------------------------------------
 mrlplot(R)
 tcplot(R)
-
 
 # ----------------------------------------
 # STEP 7: Fit Time-Varying GPRT (Unpruned)
@@ -156,7 +158,7 @@ gprt_model <- rpart(
   data = train_data,
   method = GPRT_method_xi_in_R_plus,
   parms = list(),
-  control = rpart.control(minsplit = 100, minbucket = 70, cp = 0.0015)
+  control = rpart.control(minsplit = 100, minbucket = 70, cp = 0)
 )
 printcp(gprt_model)
 print(gprt_model)
@@ -167,7 +169,7 @@ print(gprt_model)
 # -------------------------------------------
 
 # Base tree plot
-par(bg = "white", mar = c(1, 1, 1, 1))
+par(bg = "white", mar = c(2, 2, 2, 2))
 plot(gprt_model, uniform = TRUE, margin = 0.1)
 
 # Extract node positions and frame info
@@ -185,7 +187,7 @@ for (i in seq_len(nrow(frame))) {
     rect(x - 0.7, y - 0.03, x + 0.7, y + 0.03, col = "lightblue", border = "blue")
   } else {
     # Circle for terminal nodes
-    symbols(x, y, circles = 0.4, inches = FALSE, add = TRUE, bg = "lightgreen")
+    symbols(x, y, circles = 0.3, inches = FALSE, add = TRUE, bg = "lightgreen")
   }
 }
 
@@ -206,11 +208,11 @@ for (i in seq_len(nrow(frame))) {
     text(x, y - 0.08, gpd_label, cex = 0.75, col = "blue", adj = 0.5)
   } else {
     # GPD parameters inside circle
-    text(x, y, gpd_label, cex = 0.75, col = "blue", adj = 0.5)
+    #text(x, y, gpd_label, cex = 0.75, col = "blue", adj = 0.5)
     
     # Sample size below circle
     n_obs <- frame$n[i]
-    text(x, y - 0.10, paste0("n = ", n_obs), cex = 0.75, adj = 0.5)
+    text(x, y - 0.01, paste0("n = ", n_obs), cex = 0.75, adj = 0.5)
   }
 }
 
@@ -223,13 +225,12 @@ pruned_tree <- pruning_result$tree
 optimal_A <- pruning_result$A
 cat("Optimal penalty A:", optimal_A, "\n")
 
-# -------------------------------------------
+# ---------------------------------------
 # STEP 7C: Plot pruned time-varying GPRT
-# -------------------------------------------
+# ---------------------------------------
 # Base tree plot
 par(bg = "white", mar = c(2, 2, 2, 2))
 plot(pruned_tree, uniform = TRUE, margin = 0.1)
-
 
 # Extract node positions and frame info
 coords <- rpart:::rpartco(pruned_tree)
@@ -246,7 +247,7 @@ for (i in seq_len(nrow(frame))) {
     rect(x - 0.5, y - 0.03, x + 0.5, y + 0.03, col = "lightblue", border = "blue")
   } else {
     # Circle for terminal nodes
-    symbols(x, y, circles = 0.3, inches = FALSE, add = TRUE, bg = "lightgreen")
+    symbols(x, y, circles = 0.2, inches = FALSE, add = TRUE, bg = "lightgreen")
   }
 }
 
@@ -267,13 +268,15 @@ for (i in seq_len(nrow(frame))) {
     text(x, y - 0.08, gpd_label, cex = 0.75, col = "blue", adj = 0.5)
   } else {
     # GPD parameters inside circle
-    text(x, y, gpd_label, cex = 0.75, col = "blue", adj = 0.5)
+    #text(x, y, gpd_label, cex = 0.75, col = "blue", adj = 0.5)
     
     # Sample size below circle
     n_obs <- frame$n[i]
-    text(x, y - 0.10, paste0("n = ", n_obs), cex = 0.75, adj = 0.5)
+    text(x, y - 0.01, paste0("n = ", n_obs), cex = 0.75, adj = 0.5)
   }
 }
+
+
 
 # ----------------------------
 # STEP 8: Benchmarking models
@@ -313,23 +316,15 @@ cat("Optimal Cost parameter CP:", optimal_cp, "\n")
 pruned_gprt <- prune(static_gprt, cp = 0.0057574 )
 
 printcp(static_gprt)
+
 # -------------------------------
 # STEP 8B: Fit time varying GPD
 # -------------------------------
 
-# Observed rainfall values
 observed <- train_data$PRECTOTCORR
-
-# Your vector of thresholds (same length as observed)
 threshold_vec <- threshold  
-
-# Step 1: Extract exceedances (elementwise)
 exceedances <- observed[observed > threshold_vec]
-
-# Step 2: Fit GPD with threshold = 0
 gpd_model <- gpd(exceedances, threshold = 0)
-
-# Step 3: Inspect results
 print(gpd_model)
 
 
@@ -348,43 +343,21 @@ print(time_gprt_result)
 gpd_result <- compute_bic_gpd(gpd_model, length(exceedances))
 print(gpd_result)
 
+# -------------------------------------------------------
+# STEP 10: Model Evaluation Accuracy Metrics on Test Set
+# -------------------------------------------------------
 
-
-# -----------------------------------------------------
-# STEP 9: Model Evaluation Accuracy Metrics on Test Set
-# -----------------------------------------------------
-## -------------------------------
-# BIC and Log-Likelihood on Test Set
-# -------------------------------
-
-# Helper: Compute log-likelihood and BIC for GPRT models
-compute_bic_gprt <- function(tree, data) {
-  loglik <- -sum(tree$frame[tree$frame$var == "<leaf>", "dev"], na.rm = TRUE)
-  n_params <- sum(tree$frame$var == "<leaf>") * 2  # shape and scale per leaf
-  n_obs <- nrow(data)
-  bic <- -2 * loglik + log(n_obs) * n_params
-  return(list(logLik = loglik, BIC = bic))
-}
-
-# Helper: Compute log-likelihood and BIC for GPD model
-compute_bic_gpd <- function(gpd_model, n_obs) {
-  loglik <- -gpd_model$nllh.final
-  n_params <- 2  # shape and scale
-  bic <- -2 * loglik + log(n_obs) * n_params
-  return(list(logLik = loglik, BIC = bic))
-}
-
-# -------------------------------
+# --------------------------
 # 1. Static GPRT Evaluation
-# -------------------------------
+# --------------------------
 static_gprt_test_result <- compute_bic_gprt(static_gprt, test_data)
 cat("Static GPRT - LogLik:", static_gprt_test_result$logLik, "\n")
 cat("Static GPRT - BIC:", static_gprt_test_result$BIC, "\n")
 
-# -------------------------------
+# ---------------------------------------
 # 2. Pruned Time-Varying GPRT Evaluation
-# -------------------------------
-pruned_tree_test_result <- compute_bic_gprt(gprt_model, test_data)
+# ---------------------------------------
+pruned_tree_test_result <- compute_bic_gprt(pruned_tree, test_data)
 cat("Pruned Time-Varying GPRT - LogLik:", pruned_tree_test_result$logLik, "\n")
 cat("Pruned Time-Varying GPRT - BIC:", pruned_tree_test_result$BIC, "\n")
 
@@ -394,9 +367,7 @@ cat("Pruned Time-Varying GPRT - BIC:", pruned_tree_test_result$BIC, "\n")
 # Use the GAM model fitted on training data to predict threshold for test data
 threshold_vec_test <- predict(fit, newdata = test_data, type = "response")
 
-# Ensure alignment
 stopifnot(length(threshold_vec_test) == nrow(test_data))
-
 observed_test <- test_data$PRECTOTCORR
 exceedances_test <- observed_test[observed_test > threshold_vec_test]
 
@@ -410,14 +381,25 @@ bic_test <- -2 * loglik_test + log(length(exceedances_test)) * 2
 cat("Time-Varying GPD (Original Fit) - LogLik:", loglik_test, "\n")
 cat("Time-Varying GPD (Original Fit) - BIC:", bic_test, "\n")
 
+#---------------------------------------------------------------------
+# STEP: Fit GPD per terminal node using node-specific threshold
+#---------------------------------------------------------------------
 
-# Compute log-likelihood using original parameters
-loglik_test <- -sum(log(evir::dgpd(exceedances_test,
-                                   xi = gpd_model$par.ests[1],
-                                   beta = gpd_model$par.ests[2],
-                                   mu = 0)), na.rm = TRUE)
+gpd_results <- gpd_ci_shape_scale_by_node(
+  pruned_tree = pruned_tree,
+  data = train_data,
+  response_col = "PRECTOTCORR",
+  q_thresh = 0.99,
+  min_exc = 10
+)
 
-bic_test <- -2 * loglik_test + log(length(exceedances_test)) * 2
+print(gpd_results)
 
-cat("Time-Varying GPD (Original Fit) - LogLik:", loglik_test, "\n")
-cat("Time-Varying GPD (Original Fit) - BIC:", bic_test, "\n")
+
+#---------------------------------------------------------------------
+# STEP: Return levels corresponding to return periods for each terminal node
+#---------------------------------------------------------------------
+
+return_levels_ci <- compute_return_levels_with_ci(gpd_results, return_periods = c( 10, 20, 50, 100, 500, 1000))
+print(return_levels_ci)
+

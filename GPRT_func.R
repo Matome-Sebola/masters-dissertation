@@ -264,7 +264,6 @@ cross_validate_penalty <- function(tree, A_values) {
 }
 
 
-
 # -------------------------------
 # Function to Compute BIC
 # -------------------------------
@@ -287,376 +286,84 @@ compute_bic <- function(tree, n_obs, params_per_leaf = 2) {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#' 
-#' 
-#' 
-#' prune_gprt_custom <- function(tree, train_data, test_data, A_values = seq(0, 100, by = 5), verbose = TRUE) {
-#'   compute_CA <- function(tree, data, A) {
-#'     frame <- tree$frame
-#'     leaf_nodes <- which(frame$var == "<leaf>")
-#'     preds <- rep(NA, nrow(data))
-#'     
-#'     for (i in leaf_nodes) {
-#'       node_id <- as.numeric(rownames(frame)[i])
-#'       node_obs <- which(tree$where == node_id)
-#'       
-#'       shape <- frame$yval2[i, 1]
-#'       scale <- frame$yval2[i, 2]
-#'       threshold <- data$threshold_col[node_obs]
-#'       rainfall <- data$PRECTOTCORR[node_obs]
-#'       
-#'       exceedances <- rainfall - threshold
-#'       exceedances <- exceedances[exceedances > 0]
-#'       
-#'       if (length(exceedances) > 0 && shape > 0 && scale > 0) {
-#'         nll <- -sum(log(1 + shape * exceedances / scale)) / shape + length(exceedances) * log(scale)
-#'       } else {
-#'         nll <- Inf
-#'       }
-#'       
-#'       preds[node_obs] <- nll
-#'     }
-#'     
-#'     total_loss <- sum(preds, na.rm = TRUE)
-#'     n_leaves <- length(leaf_nodes)
-#'     CA <- total_loss + A * n_leaves
-#'     return(CA)
-#'   }
-#'   
-#'   best_tree <- NULL
-#'   best_CA <- Inf
-#'   best_A <- NA
-#'   
-#'   for (A in A_values) {
-#'     current_tree <- tree
-#'     current_CA <- compute_CA(current_tree, test_data, A)
-#'     
-#'     repeat {
-#'       frame <- current_tree$frame
-#'       leaf_nodes <- which(frame$var == "<leaf>")
-#'       if (length(leaf_nodes) <= 1) break
-#'       
-#'       leaf_deviances <- frame$dev[leaf_nodes]
-#'       worst_leaf <- leaf_nodes[which.min(leaf_deviances)]
-#'       
-#'       new_cp <- frame$complexity[worst_leaf] + 1e-4
-#'       pruned <- try(prune(current_tree, cp = new_cp), silent = TRUE)
-#'       if (inherits(pruned, "try-error")) break
-#'       
-#'       new_CA <- compute_CA(pruned, test_data, A)
-#'       
-#'       if (new_CA < current_CA) {
-#'         current_tree <- pruned
-#'         current_CA <- new_CA
-#'       } else {
-#'         break
-#'       }
-#'     }
-#'     
-#'     if (verbose) cat("A =", A, "→ C_A =", round(current_CA, 2), "\n")
-#'     
-#'     if (current_CA < best_CA) {
-#'       best_CA <- current_CA
-#'       best_tree <- current_tree
-#'       best_A <- A
-#'     }
-#'   }
-#'   
-#'   if (verbose) cat("Selected A:", best_A, "\n")
-#'   return(best_tree)
-#' }
-#' 
-#' 
-#' 
-#' #' 
-#' #' 
-#' #' 
-#' #' #Functions for pruning
-#' #' 
-#' #' #'@param y a numeric vector
-#' #' #'@param sh a shape parameter
-#' #' #'@param sc a scale parameter
-#' #' #'@return goodness the negative log likelihood computed on y according to a generalized pareto distribution with paramters shape, scale and location=0
-#' #' LL=function(y,sh,sc){
-#' #'   temp=evir::dgpd(y,xi=sh,beta=sc,mu=0)
-#' #'   goodness=-(sum(log(temp)))
-#' #'   if(is.na(goodness)){
-#' #'     #print("Warning: unable to compute the LL for a subset of the test sample in a leaf")
-#' #'     goodness=+Inf
-#' #'   }
-#' #'   return(goodness)
-#' #' }
-#' #' 
-#' #' #'@param arbre a tree of the class rpart
-#' #' #'@param train_data a test data sample
-#' #' #'@return a vector of the x relative errors of the tree, ie the ratio between the sum of the negative log likelihood at each leaf and the root negative log likelihood, for each tree pruned thanks to the complexity parameter and with the test sample
-#' #' construct_x_rel_error_alpha_gprt=function(arbre,test_data,name_response,alpha){
-#' #'   #tree=prune(arbre,cp=alpha/arbre$frame[1,"dev"])
-#' #'   tree=prune_tree(rpart_object=arbre,CP=alpha)
-#' #' 
-#' #'   y_val_tree=matrix(c(1:dim(tree$frame)[1],
-#' #'                       as.numeric(row.names(tree$frame)),
-#' #'                       as.numeric(as.matrix(tree$frame)[,c("yval2.1","yval2.2")])),
-#' #'                     nrow=dim(tree$frame)[1],ncol=4,byrow=FALSE)
-#' #'   colnames(y_val_tree)=c("where","node","sh","sc")
-#' #' 
-#' #'   number_of_terminal_nodes=sum(tree$frame[,"var"]=="<leaf>")
-#' #' 
-#' #'   where_test_data=as.vector(rpart.predict.leaves(tree, test_data, type = "where"))
-#' #'   unique_where_test_data=sort(unique(where_test_data))
-#' #'   unique_where_test_data=matrix(c(unique_where_test_data,rep(0,times=length(unique_where_test_data))),ncol=2,byrow=FALSE)
-#' #'   colnames(unique_where_test_data)=c("where","NLL")
-#' #' 
-#' #'   for(i in 1:dim(unique_where_test_data)[1]){
-#' #'     where=unique_where_test_data[i]
-#' #'     y=test_data[where_test_data==where,name_response]
-#' #'     # unique_where_test_data[i,2]=positive_nll(LL(y,
-#' #'     #                                sh=y_val_tree[y_val_tree[,"where"]==where,"sh"],
-#' #'     #                                sc=y_val_tree[y_val_tree[,"where"]==where,"sc"]))
-#' #'     unique_where_test_data[i,2]=LL(y,
-#' #'                                    sh=y_val_tree[y_val_tree[,"where"]==where,"sh"],
-#' #'                                    sc=y_val_tree[y_val_tree[,"where"]==where,"sc"])
-#' #'   }
-#' #' 
-#' #'   return(sum(unique_where_test_data[,"NLL"]))
-#' #' 
-#' #' }
-#' #' 
-#' #' 
-#' #' #'@param arbre a tree of the class rpart
-#' #' #'@param train_data a test data sample
-#' #' #'@return a vector of the x relative errors of the tree, ie the ratio between the sum of the negative log likelihood at each leaf and the root negative log likelihood, for each tree pruned thanks to the complexity parameter and with the test sample
-#' #' cross_val_gprt=function(data,formula,arbre,n_fold,seed,choice="first increase"){
-#' #'   
-#' #'   #On the tree
-#' #'   
-#' #'   alpha=as.numeric(get_table(arbre)[,"CP"])
-#' #'   
-#' #'   if(alpha[length(alpha)]==0){
-#' #'     alpha=alpha[1:(length(alpha)-1)]
-#' #'   }
-#' #'   
-#' #'   beta=sort(c(1,seq(alpha[length(alpha)],alpha[1],length.out=1000),0),decreasing=TRUE)
-#' #'   
-#' #'   #On the n_fold trees
-#' #'   
-#' #'   set.seed(seed)
-#' #'   xgroup=sample(1:n_fold,size=dim(data)[1],replace=TRUE)
-#' #'   
-#' #'   
-#' #'   list_train_tree=list()
-#' #'   Risk_matrix=matrix(nrow = length(beta),ncol = n_fold)
-#' #'   
-#' #'   for(k in 1:n_fold){
-#' #'     train_data=data[xgroup!=k,]
-#' #'     test_data=data[xgroup==k,]
-#' #'     
-#' #'     tree_train=rpart(data = train_data,
-#' #'                      formula = formula,
-#' #'                      method = GPRT_method_xi_in_R_plus,
-#' #'                      control = rpart.control(cp=0,minsplit=50, minbucket=30, maxcompete=0, maxsurrogate=0),
-#' #'                      xval=0)
-#' #'     
-#' #'     list_train_tree[[k]]=tree_train
-#' #'     
-#' #'     # for(l in 1:length(beta)){
-#' #'     #   Risk_matrix[l,k]=construct_x_rel_error_alpha_gprt(arbre = tree_train,test_data = test_data,name_response = as.character(formula[[2]]),alpha = beta[l])
-#' #'     # }
-#' #'     Risk_matrix[,k]=sapply(X = beta,FUN="construct_x_rel_error_alpha_gprt",arbre = tree_train,test_data = test_data,name_response = as.character(formula[[2]]))
-#' #'     
-#' #'     
-#' #'   }
-#' #'   
-#' #'   Risk_beta=rowSums(Risk_matrix)
-#' #'   #res=beta[Risk_beta==min(Risk_beta)]
-#' #'   #We choose the deepth just before which the test error begin to increase
-#' #'   pos=match(TRUE,Risk_beta[-1]>Risk_beta[-length(Risk_beta)])
-#' #'   if(is.na(pos) | choice=="min"){
-#' #'     #If the test error does not increase, we choose the minimal deepth that minimize the test error
-#' #'     depth=beta[match(TRUE,Risk_beta==min(Risk_beta))][1]
-#' #'   }else{
-#' #'     depth=beta[pos][1]
-#' #'   }
-#' #'   
-#' #'   res=list(depth,beta,Risk_beta)
-#' #'   
-#' #'   return(res)
-#' #' }
-#' #' 
-#' #' 
-#' #' 
-#' #' #'@param arbre a tree of the class rpart
-#' #' #'@param train_data a test data sample
-#' #' #'@return a vector of the x relative errors of the tree, ie the ratio between the sum of the negative log likelihood at each leaf and the root negative log likelihood, for each tree pruned thanks to the complexity parameter and with the test sample
-#' #' prune_train_test_gprt=function(data_train,data_test,formula,arbre_apprentissage){
-#' #'   
-#' #'   #On the tree
-#' #'   
-#' #'   alpha=c(as.numeric(arbre_apprentissage$cptable[,"CP"])*arbre_apprentissage$frame[1,"dev"])
-#' #'   
-#' #'   Risk_alpha=double(length(alpha))
-#' #'   
-#' #'   for(l in 1:length(alpha)){
-#' #'     Risk_alpha[l]=construct_x_rel_error_alpha_gprt(arbre = arbre_apprentissage,test_data = data_test,name_response = as.character(formula[[2]]),alpha = alpha[l])
-#' #'   }
-#' #'   
-#' #'   #Compute the risk for each beta and each fold
-#' #'   
-#' #'   
-#' #'   h=Risk_alpha[1]-min(Risk_alpha,na.rm=TRUE)
-#' #'   #res = max(match(TRUE, Risk_alpha <= min(Risk_alpha,na.rm=TRUE)+1/2*h)-1,1)
-#' #'   res = match(TRUE, Risk_alpha == min(Risk_alpha,na.rm=TRUE))
-#' #'   
-#' #'   #res=alpha[match(TRUE,Risk_alpha==min(Risk_alpha))]
-#' #'   
-#' #'   return(res)
-#' #' }
-#' #' 
-#' #' 
-#' #' positive_nll=function(x){
-#' #'   if(x>0){
-#' #'     return(x+1)
-#' #'   }else{
-#' #'     return(exp(x))
-#' #'   }
-#' #' }
-#' #' 
-#' #' ll_ratio_test_prune_gprt=function(arbre){
-#' #'   ll=c()
-#' #'   n_param=c()
-#' #'   depth=dim(arbre$cptable)[1]
-#' #'   for(i in 1:depth){
-#' #'     sub_tree=prune(arbre,cp=arbre$cptable[i,"CP"])
-#' #'     ll=c(ll,-sum(sub_tree$frame[sub_tree$frame$var=="<leaf>","dev"]))
-#' #'   }
-#' #'   n_param=(arbre$cptable[,"nsplit"]+1)*2
-#' #'   valeurs=ll[2:length(ll)]-ll[1:(length(ll)-1)]
-#' #'   seuils=qchisq(p = 0.95,df = n_param[2:length(n_param)]-n_param[1:(length(n_param)-1)])
-#' #'   decision=valeurs>seuils
-#' #'   level=sum(cumsum(decision)==1:length(decision))+1
-#' #'   alpha=arbre$cptable[level,"CP"]*arbre$frame[1,"dev"]
-#' #'   return(alpha)
-#' #' }
-#' #' 
-#' #' 
-#' #' get_table=function(rpart_object){
-#' #'   n_split=1:nrow(rpart_object$splits)
-#' #'   var=rownames(rpart_object$splits)
-#' #'   improve=rpart_object$splits[,"improve"]
-#' #'   n=rpart_object$splits[,"count"]
-#' #'   CP=(rpart_object$frame[1,"dev"]-cumsum(rpart_object$splits[,"improve"]))/rpart_object$frame[1,"dev"]
-#' #'   return(cbind(n_split,CP,improve,var,n))
-#' #' }
-#' #' 
-#' #' match_id_id_bis=function(id_bis,table,frame){
-#' #'   frame$improve=NA
-#' #'   for(i in 1:nrow(frame)){
-#' #'     if(frame$var[i]!="<leaf>"){
-#' #'       id=row.names(frame)[i]
-#' #'       frame$improve[i]=frame$dev[row.names(frame) == as.character(as.numeric(id))]-(frame$dev[row.names(frame) == as.character(2*as.numeric(id))] + frame$dev[row.names(frame) == as.character(2*as.numeric(id) + 1)])
-#' #'     }
-#' #'   }
-#' #'   
-#' #'   id=rownames(frame)[frame$var==table[id_bis,"var"] & frame$n==table[id_bis,"n"]  &  round(as.numeric(frame$improve),digits=6)==round(as.numeric(table[id_bis,"improve"]),digits=6)]
-#' #'   return(as.numeric(id))
-#' #' }
-#' #' 
-#' #' prune_tree=function(rpart_object,CP){
-#' #'   frame <- rpart_object$frame
-#' #'   
-#' #'   COMPUTE=FALSE
-#' #'   if(length(rpart_object$splits)>0){
-#' #'     if(nrow(rpart_object$splits)>0){
-#' #'       COMPUTE=TRUE
-#' #'     }
-#' #'   }
-#' #'   if(COMPUTE){
-#' #'     
-#' #'     table=get_table(rpart_object)
-#' #'     id_bis_splits_to_remove=table[,"n_split"][table[,"CP"]<CP]
-#' #'     
-#' #'     if(length(id_bis_splits_to_remove)==nrow(table)){
-#' #'       return(prune(rpart_object,cp=Inf))
-#' #'     }else{
-#' #'       if(length(id_bis_splits_to_remove)==0){
-#' #'         return(rpart_object)
-#' #'       }else{
-#' #'         id_splits_to_remove=sapply(as.numeric(id_bis_splits_to_remove),FUN="match_id_id_bis",table=table,frame=frame)
-#' #'         return(snip.rpart(rpart_object, id_splits_to_remove))
-#' #'       }
-#' #'     }
-#' #'     
-#' #'   }else{
-#' #'     return(rpart_object)
-#' #'   }
-#' #'   
-#' #' }
+#---------------------------------------------------------------------
+# STEP: Fit GPD per terminal node using node-specific threshold
+#---------------------------------------------------------------------
+
+gpd_return_levels_by_node <- function(pruned_tree, data, response_col = "PRECTOTCORR",
+                                      q_thresh = 0.98, min_exc = 10,
+                                      return_periods = c(10, 20, 50, 100, 150, 200),
+                                      obs_per_year = 365) {
+  
+  terminal_nodes <- unique(pruned_tree$where)
+  results <- list()
+  
+  for (node in terminal_nodes) {
+    node_data <- data[pruned_tree$where == node, ]
+    if (nrow(node_data) <= min_exc) next
+    
+    thr <- quantile(node_data[[response_col]], probs = q_thresh, na.rm = TRUE)
+    exc_data <- node_data[[response_col]][node_data[[response_col]] > thr]
+    n_exc <- length(exc_data)
+    if (n_exc < min_exc) next
+    
+    # Fit GPD
+    gpd_fit <- evir::gpd(node_data[[response_col]], threshold = thr)
+    
+    shape <- gpd_fit$par.ests["xi"]
+    scale <- gpd_fit$par.ests["beta"]
+    se_shape <- gpd_fit$par.ses["xi"]
+    se_scale <- gpd_fit$par.ses["beta"]
+    
+    # 95% CI for shape parameter
+    shape_lower95 <- shape - 1.96 * se_shape
+    shape_upper95 <- shape + 1.96 * se_shape
+    
+    n_obs <- nrow(node_data)
+    zeta_u <- n_exc / n_obs
+    
+    # Compute return levels + CI
+    rl_df <- data.frame()
+    for (R in return_periods) {
+      T <- R * obs_per_year
+      
+      if (abs(shape) > 1e-6) {
+        rl <- thr + (scale / shape) * ((T * zeta_u)^shape - 1)
+        
+        # Delta method: partial derivatives
+        d_scale <- ((T * zeta_u)^shape - 1) / shape
+        d_shape <- -(scale / shape^2) * ((T * zeta_u)^shape - 1) +
+          (scale / shape) * ((T * zeta_u)^shape * log(T * zeta_u))
+        
+      } else {
+        rl <- thr + scale * log(T * zeta_u)
+        
+        d_scale <- log(T * zeta_u)
+        d_shape <- 0  # approx
+      }
+      
+      # Variance approximation (ignoring covariance term)
+      var_rl <- (d_scale^2) * (se_scale^2) + (d_shape^2) * (se_shape^2)
+      se_rl <- sqrt(var_rl)
+      
+      rl_df <- rbind(rl_df, data.frame(
+        node = node,
+        n_obs = n_obs,
+        threshold = thr,
+        n_exceedances = n_exc,
+        shape = shape,
+        shape_lower95 = shape_lower95,
+        shape_upper95 = shape_upper95,
+        scale = scale,
+        return_period = R,
+        return_level = rl,
+        rl_lower95 = rl - 1.96 * se_rl,
+        rl_upper95 = rl + 1.96 * se_rl
+      ))
+    }
+    
+    results[[as.character(node)]] <- rl_df
+  }
+  
+  return(do.call(rbind, results))
+}
